@@ -6,4 +6,5 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   optimizeDeps: { exclude: ["@ffmpeg/ffmpeg", "@ffmpeg/util"] },
+  base: "/video-trimmer/",
 });

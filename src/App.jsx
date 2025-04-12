@@ -38,7 +38,7 @@ function App() {
     const end_time = document.getElementById("video_end").value;
     const input_video_duration = document.getElementById("input_video").duration;
     let valid_start;
-    let valid_end = input_video_duration;
+    let valid_end;
     if (!isNaN(start_time) && start_time>=0 && (isNaN(input_video_duration) || start_time<input_video_duration)){
       valid_start = start_time;
     }
@@ -63,7 +63,7 @@ function App() {
     if (valid_start>valid_end){
       [valid_start, valid_end] = [valid_end, valid_start];
       LogString+="Start time must be less than End time, trimming will be attempted with times swapped ";
-      console
+      console.log(`start_time=${start_time}\n end_time=${end_time} \n valid_start=${valid_start}\n valid_end=${valid_end}\n input_video_duration=${input_video_duration}`)
       isValid = false;
     }
     if (! isValid){
