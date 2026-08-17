@@ -1,12 +1,11 @@
-# React + Vite
+This app provides a simple web ui to trim a video using ffmpeg
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Use case: Easily trim a video by providing a start and stop time in seconds in web browser without uploading data to external server.
 
-Currently, two official plugins are available:
+Uses ffmpeg.wasm https://github.com/ffmpegwasm/ffmpeg.wasm to trim videos.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+stack: React + vite
 
-## Expanding the ESLint configuration
 
-If you are developing a production application, we recommend using TypeScript and enable type-aware lint rules. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+TODO:
+<li>Provide a visual feedback to user while video is being processed</li>
