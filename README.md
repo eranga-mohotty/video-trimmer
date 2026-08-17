@@ -9,3 +9,6 @@ stack: React + vite
 
 TODO:
 <li>Provide a visual feedback to user while video is being processed</li>
+
+<br><br>
+url: https://eranga-mohotty.github.io/video-trimmer/
