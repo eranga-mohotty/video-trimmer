@@ -1,6 +1,6 @@
 # 🎬 Video Trimmer
 
-A fast, lightweight, and privacy-first web application to trim video clips directly in your browser using **FFmpeg WebAssembly** (`ffmpeg.wasm`). 
+A fast, lightweight, and privacy-first web application to trim video clips directly in your browser using **FFmpeg WebAssembly** (`ffmpeg.wasm`).
 
 No video uploads, no backend servers, and no data tracking — all video processing is performed 100% locally on your machine.
 
@@ -21,7 +21,7 @@ No video uploads, no backend servers, and no data tracking — all video process
 - 🎚️ **Interactive Timeline Markers**: Draggable `[ Start` and `End ]` handles directly below the video player with live frame scrubbing.
 - 🔄 **Two-Way Synchronization**: Manually enter timestamps or drag markers; both update and stay synchronized in real time.
 - ⏱️ **Quick Playhead Snapping & Preview**: One-click buttons to set start/end markers to the current playback frame, plus a dedicated "Preview Trim" button to audition your cut.
-- 📊 **Real-Time Visual Progress Indicator**: Live progress bar with stage descriptions (*Loading into memory*, *Trimming*, *Preparing preview*) and percentage completion.
+- 📊 **Real-Time Visual Progress Indicator**: Live progress bar with stage descriptions (_Loading into memory_, _Trimming_, _Preparing preview_) and percentage completion.
 - 🎬 **Instant In-Browser Previews**: Built-in video players to preview both the original source video and the trimmed result before saving.
 - 💾 **Direct Download**: One-click download button for saving the trimmed output file with clear naming.
 - 🌙 **Modern Dark UI**: Clean, responsive layout crafted with React and Tailwind CSS.
@@ -48,6 +48,7 @@ No video uploads, no backend servers, and no data tracking — all video process
 ### Installation
 
 1. **Clone the repository**:
+
    ```bash
    git clone https://github.com/eranga-mohotty/video-trimmer.git
    cd video-trimmer
