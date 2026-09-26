@@ -79,7 +79,7 @@ describe("useFFmpeg", () => {
     });
 
     expect(result.current.progress).toBe(45);
-    expect(result.current.processingStage).toBe("Trimming video... 45%");
+    expect(result.current.processingStage).toBe("Processing... 45%");
   });
 
   it("executes trimVideo workflow with correct arguments and cleans up", async () => {
@@ -109,6 +109,82 @@ describe("useFFmpeg", () => {
     expect(outUrl).toBe("blob:http://localhost/mock-video-url");
     expect(result.current.isProcessing).toBe(false);
     expect(result.current.progress).toBe(100);
+  });
+
+  it("executes extractAudio with correct flags (-vn -c:a copy)", async () => {
+    const { result } = renderHook(() => useFFmpeg());
+
+    const mockFile = new File(["dummy video"], "clip.mp4", {
+      type: "video/mp4",
+    });
+
+    let audioPromise;
+    act(() => {
+      audioPromise = result.current.extractAudio(mockFile, "m4a");
+    });
+
+    expect(result.current.isProcessing).toBe(true);
+
+    const outUrl = await act(async () => {
+      return await audioPromise;
+    });
+
+    expect(mockWriteFile).toHaveBeenCalledTimes(1);
+    expect(mockExec).toHaveBeenCalledWith(
+      expect.arrayContaining(["-vn", "-c:a", "copy"]),
+    );
+    expect(mockReadFile).toHaveBeenCalledTimes(1);
+    expect(mockDeleteFile).toHaveBeenCalledTimes(2);
+    expect(outUrl).toBe("blob:http://localhost/mock-video-url");
+    expect(result.current.isProcessing).toBe(false);
+  });
+
+  it("executes removeStreams with chosen options (-an, -sn, -dn)", async () => {
+    const { result } = renderHook(() => useFFmpeg());
+
+    const mockFile = new File(["dummy video"], "clip.mp4", {
+      type: "video/mp4",
+    });
+
+    let streamPromise;
+    act(() => {
+      streamPromise = result.current.removeStreams(mockFile, {
+        removeAudio: true,
+        removeSubtitles: true,
+        removeMetadata: true,
+      });
+    });
+
+    const outUrl = await act(async () => {
+      return await streamPromise;
+    });
+
+    expect(mockExec).toHaveBeenCalledWith(
+      expect.arrayContaining(["-c:v", "copy", "-an", "-sn", "-dn"]),
+    );
+    expect(outUrl).toBe("blob:http://localhost/mock-video-url");
+  });
+
+  it("executes switchContainer with target format", async () => {
+    const { result } = renderHook(() => useFFmpeg());
+
+    const mockFile = new File(["dummy video"], "clip.mp4", {
+      type: "video/mp4",
+    });
+
+    let remuxPromise;
+    act(() => {
+      remuxPromise = result.current.switchContainer(mockFile, "mkv");
+    });
+
+    const outUrl = await act(async () => {
+      return await remuxPromise;
+    });
+
+    expect(mockExec).toHaveBeenCalledWith(
+      expect.arrayContaining(["-c", "copy"]),
+    );
+    expect(outUrl).toBe("blob:http://localhost/mock-video-url");
   });
 
   it("handles errors during trimVideo gracefully", async () => {

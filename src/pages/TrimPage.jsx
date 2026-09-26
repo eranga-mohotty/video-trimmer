@@ -109,8 +109,23 @@ export function TrimPage({ ffmpegEngine }) {
     }
   }, [isProcessing, inputVideo, startTime, endTime, outVideo, trimVideo]);
 
+  const isMkv = inputVideo?.name?.toLowerCase().endsWith(".mkv");
+
   return (
     <section className="w-full flex flex-col items-center">
+      {/* MKV Compatibility Notice */}
+      {isMkv && (
+        <div
+          role="alert"
+          className="flex items-start gap-2 text-xs text-amber-300 bg-amber-950/40 border border-amber-800/60 rounded-xl px-3.5 py-2.5 my-2 w-full max-w-xl shadow-sm"
+        >
+          <span className="text-base leading-none">⚠️</span>
+          <span>
+            <strong>Notice:</strong> In-browser video playback may not be supported for MKV files depending on your browser. Trimming and downloading will still function normally.
+          </span>
+        </div>
+      )}
+
       <VideoPlayer
         videoRef={videoRef}
         videoUrl={inputVideoUrl}

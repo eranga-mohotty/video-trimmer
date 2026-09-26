@@ -70,13 +70,13 @@ export default function App() {
             <TrimPage ffmpegEngine={ffmpegEngine} />
           )}
           {currentRoute === "extract-audio" && (
-            <ExtractAudioPage />
+            <ExtractAudioPage ffmpegEngine={ffmpegEngine} />
           )}
           {currentRoute === "remove-streams" && (
-            <RemoveStreamsPage />
+            <RemoveStreamsPage ffmpegEngine={ffmpegEngine} />
           )}
           {currentRoute === "switch-container" && (
-            <SwitchContainerPage />
+            <SwitchContainerPage ffmpegEngine={ffmpegEngine} />
           )}
         </main>
       )}

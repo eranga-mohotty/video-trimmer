@@ -18,8 +18,8 @@ describe("NavigationDrawer component", () => {
     expect(screen.getByText("Remove Streams")).toBeInTheDocument();
     expect(screen.getByText("Switch Container")).toBeInTheDocument();
 
-    expect(screen.getByText("Active")).toBeInTheDocument();
-    expect(screen.getAllByText("Coming Soon")).toHaveLength(3);
+    expect(screen.queryByText("Active")).not.toBeInTheDocument();
+    expect(screen.getAllByText("New")).toHaveLength(3);
   });
 
   it("calls onNavigate and onClose when a tool is clicked", () => {
