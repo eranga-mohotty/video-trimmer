@@ -1,11 +1,11 @@
 export function Header({ onMenuClick, currentRouteName }) {
   return (
-    <header className="w-full max-w-2xl flex items-center justify-between pt-6 pb-4 px-2">
-      {/* Hamburger Menu Toggle Button */}
+    <>
+      {/* Top-Left Hamburger Menu Button */}
       <button
         type="button"
         onClick={onMenuClick}
-        className="p-2.5 bg-gray-800/80 hover:bg-gray-750 text-gray-200 hover:text-white rounded-xl border border-gray-700 shadow-sm transition-all hover:shadow cursor-pointer flex items-center gap-2 group"
+        className="fixed top-4 left-4 z-30 p-2.5 bg-gray-800/80 hover:bg-gray-750 text-gray-200 hover:text-white rounded-xl border border-gray-700 shadow-md backdrop-blur-xs transition-all hover:scale-105 cursor-pointer flex items-center justify-center group"
         aria-label="Open navigation menu"
       >
         <svg
@@ -21,23 +21,19 @@ export function Header({ onMenuClick, currentRouteName }) {
             d="M4 6h16M4 12h16M4 18h16"
           />
         </svg>
-        <span className="hidden sm:inline text-xs font-medium text-gray-400 group-hover:text-gray-200">
-          Tools
-        </span>
       </button>
 
       {/* Main Title & Subtitle */}
-      <div className="text-center flex-1 mx-3">
+      <header className="w-full max-w-2xl text-center pt-6 pb-4 px-12 sm:px-4">
         <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight bg-gradient-to-r from-blue-400 via-indigo-300 to-blue-200 bg-clip-text text-transparent">
-          {currentRouteName ? `Video Tools: ${currentRouteName}` : "Video Trimmer"}
+          {currentRouteName
+            ? `Video Tools: ${currentRouteName}`
+            : "Video Trimmer"}
         </h1>
         <p className="text-xs sm:text-sm text-gray-400 mt-1">
           Fast, private, in-browser video manipulation powered by ffmpeg.wasm
         </p>
-      </div>
-
-      {/* Placeholder to balance the flex layout */}
-      <div className="w-10 sm:w-16" aria-hidden="true" />
-    </header>
+      </header>
+    </>
   );
 }
