@@ -11,10 +11,12 @@ export function formatTime(secs) {
   if (isNaN(secs) || secs === undefined || secs === null || secs < 0) {
     return "0:00.0";
   }
-  const m = Math.floor(secs / 60);
-  const s = Math.floor(secs % 60);
-  const ms = Math.floor((secs % 1) * 10);
-  return `${m}:${s < 10 ? "0" : ""}${s}.${ms}`;
+  const totalDeciseconds = Math.round(secs * 10);
+  const totalSeconds = Math.floor(totalDeciseconds / 10);
+  const tenths = totalDeciseconds % 10;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds < 10 ? "0" : ""}${seconds}.${tenths}`;
 }
 
 /**

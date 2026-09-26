@@ -7,4 +7,9 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   optimizeDeps: { exclude: ["@ffmpeg/ffmpeg", "@ffmpeg/util"] },
   base: "/video-trimmer/",
+  test: {
+    globals: true,
+    environment: "jsdom",
+    setupFiles: "./src/test/setup.js",
+  },
 });

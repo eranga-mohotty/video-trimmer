@@ -18,7 +18,8 @@ export function FilePicker({ selectedFile, onFileSelect, disabled }) {
         accept="video/*"
         disabled={disabled}
         onChange={(e) => {
-          const file = e.target.files?.item(0);
+          const files = e.target.files;
+          const file = files?.[0] || (files?.item ? files.item(0) : null);
           if (file) onFileSelect(file);
         }}
       />
