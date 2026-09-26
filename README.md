@@ -18,6 +18,9 @@ No video uploads, no backend servers, and no data tracking — all video process
 
 - 🔒 **100% Client-Side & Private**: Your videos never leave your browser. Zero server uploads and zero privacy concerns.
 - ⚡ **Fast Lossless Trimming**: Uses FFmpeg stream copy (`-c copy`) mode to cut videos without re-encoding, preserving original quality and finishing in seconds.
+- 🎚️ **Interactive Timeline Markers**: Draggable `[ Start` and `End ]` handles directly below the video player with live frame scrubbing.
+- 🔄 **Two-Way Synchronization**: Manually enter timestamps or drag markers; both update and stay synchronized in real time.
+- ⏱️ **Quick Playhead Snapping & Preview**: One-click buttons to set start/end markers to the current playback frame, plus a dedicated "Preview Trim" button to audition your cut.
 - 📊 **Real-Time Visual Progress Indicator**: Live progress bar with stage descriptions (*Loading into memory*, *Trimming*, *Preparing preview*) and percentage completion.
 - 🎬 **Instant In-Browser Previews**: Built-in video players to preview both the original source video and the trimmed result before saving.
 - 💾 **Direct Download**: One-click download button for saving the trimmed output file with clear naming.

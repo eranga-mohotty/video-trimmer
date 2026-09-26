@@ -5,6 +5,14 @@ import "./App.css";
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { fetchFile } from "@ffmpeg/util";
 
+function formatTime(secs) {
+  if (isNaN(secs) || secs === undefined || secs === null) return "0:00.0";
+  const m = Math.floor(secs / 60);
+  const s = Math.floor(secs % 60);
+  const ms = Math.floor((secs % 1) * 10);
+  return `${m}:${s < 10 ? "0" : ""}${s}.${ms}`;
+}
+
 function App() {
   const [isFFmpegLoaded, setIsFFmpegLoaded] = useState(false);
   const [inputVideo, setInputVideo] = useState();
@@ -13,8 +21,18 @@ function App() {
   const [progress, setProgress] = useState(0);
   const [processingStage, setProcessingStage] = useState("");
 
+  // Timeline and playback state
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [startTime, setStartTime] = useState(0);
+  const [endTime, setEndTime] = useState(0);
+  const [draggingHandle, setDraggingHandle] = useState(null); // 'start' | 'end' | null
+  const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
+
   const ffmpegRef = useRef(new FFmpeg());
   const messageRef = useRef(null);
+  const videoRef = useRef(null);
+  const timelineRef = useRef(null);
 
   const inputVideoUrl = useMemo(() => {
     if (!inputVideo) return null;
@@ -60,56 +78,109 @@ function App() {
     load();
   }, []);
 
+  // Handle timeline track click to seek
+  const handleTrackClick = (e) => {
+    if (!timelineRef.current || duration <= 0 || draggingHandle || isProcessing) return;
+    const rect = timelineRef.current.getBoundingClientRect();
+    const clickX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+    const seekTime = Number(((clickX / rect.width) * duration).toFixed(1));
+    if (videoRef.current) {
+      videoRef.current.currentTime = seekTime;
+      setCurrentTime(seekTime);
+    }
+  };
+
+  // Dragging handles with pointer events
+  const handlePointerDown = (type, e) => {
+    if (isProcessing) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setDraggingHandle(type);
+  };
+
+  const handlePointerMove = (type, e) => {
+    if (draggingHandle !== type || !timelineRef.current || duration <= 0) return;
+    const rect = timelineRef.current.getBoundingClientRect();
+    const clampedX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+    const newTime = Number(((clampedX / rect.width) * duration).toFixed(1));
+
+    if (type === "start") {
+      const validStart = Math.min(newTime, Math.max(0, endTime - 0.1));
+      const rounded = Number(Math.max(0, validStart).toFixed(1));
+      setStartTime(rounded);
+      if (videoRef.current) {
+        videoRef.current.currentTime = rounded;
+        setCurrentTime(rounded);
+      }
+    } else if (type === "end") {
+      const validEnd = Math.max(newTime, Math.min(duration, startTime + 0.1));
+      const rounded = Number(Math.min(duration, validEnd).toFixed(1));
+      setEndTime(rounded);
+      if (videoRef.current) {
+        videoRef.current.currentTime = rounded;
+        setCurrentTime(rounded);
+      }
+    }
+  };
+
+  const handlePointerUp = (type, e) => {
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      // Ignored if capture already lost
+    }
+    setDraggingHandle(null);
+  };
+
+  // Quick Action Buttons
+  const setStartToCurrent = () => {
+    if (!videoRef.current || isProcessing) return;
+    const cur = Number(videoRef.current.currentTime.toFixed(1));
+    const newStart = Math.min(cur, Math.max(0, endTime - 0.1));
+    setStartTime(Number(newStart.toFixed(1)));
+  };
+
+  const setEndToCurrent = () => {
+    if (!videoRef.current || isProcessing) return;
+    const cur = Number(videoRef.current.currentTime.toFixed(1));
+    const newEnd = Math.max(cur, Math.min(duration, startTime + 0.1));
+    setEndTime(Number(newEnd.toFixed(1)));
+  };
+
+  const togglePreviewTrim = () => {
+    if (!videoRef.current || isProcessing) return;
+    if (isPreviewPlaying) {
+      videoRef.current.pause();
+      setIsPreviewPlaying(false);
+    } else {
+      videoRef.current.currentTime = startTime;
+      videoRef.current.play();
+      setIsPreviewPlaying(true);
+    }
+  };
+
   const validateAndTrim = () => {
     if (isProcessing) return;
 
-    let isValid = true;
-    let LogString = "";
-    const start_time = document.getElementById("video_start").value;
-    const end_time = document.getElementById("video_end").value;
-    const input_video_duration =
-      document.getElementById("input_video").duration;
-    let valid_start;
-    let valid_end;
-    if (
-      !isNaN(start_time) &&
-      start_time >= 0 &&
-      (isNaN(input_video_duration) || start_time < input_video_duration)
-    ) {
-      valid_start = start_time;
-    } else {
+    let valid_start = startTime;
+    let valid_end = endTime;
+
+    if (isNaN(valid_start) || valid_start < 0) {
       valid_start = 0;
-      LogString +=
-        "invalid Start time, trimming will be attempted with default value of 0 ";
-      isValid = false;
     }
-    if (
-      !isNaN(end_time) &&
-      end_time > 0 &&
-      (isNaN(input_video_duration) || end_time <= input_video_duration)
-    ) {
-      valid_end = end_time;
-    } else {
-      if (isNaN(input_video_duration)) {
-        alert("End time must be provided.");
+    if (isNaN(valid_end) || valid_end <= 0) {
+      if (duration > 0) {
+        valid_end = duration;
+      } else {
+        window.alert("Please provide a valid End time.");
         return;
       }
-      valid_end = input_video_duration;
-      LogString += `Invalid End time, trimming will be attempted with default value of ${input_video_duration} `;
-      isValid = false;
     }
-    if (valid_start > valid_end) {
-      [valid_start, valid_end] = [valid_end, valid_start];
-      LogString +=
-        "Start time must be less than End time, trimming will be attempted with times swapped ";
-      console.log(
-        `start_time=${start_time}\n end_time=${end_time} \n valid_start=${valid_start}\n valid_end=${valid_end}\n input_video_duration=${input_video_duration}`,
-      );
-      isValid = false;
-    }
-    if (!isValid) {
-      window.alert(LogString);
-      console.warn(LogString);
+
+    if (valid_start >= valid_end) {
+      window.alert("Start time must be strictly less than End time.");
+      return;
     }
 
     trimMediaStream(valid_start, valid_end);
@@ -166,6 +237,12 @@ function App() {
     }
   };
 
+  // Percentage calculations for timeline rendering
+  const startPercent = duration > 0 ? (startTime / duration) * 100 : 0;
+  const endPercent = duration > 0 ? (endTime / duration) * 100 : 100;
+  const currentPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const trimDuration = Math.max(0, endTime - startTime);
+
   return (
     <div className="relative overflow-hidden bg-gray-800 min-h-screen text-gray-100 flex flex-col items-center">
       <h1 className="text-5xl p-5 font-bold">Video Trimmer</h1>
@@ -173,14 +250,141 @@ function App() {
         <div className="p-5 flex flex-col items-center max-w-2xl w-full">
           {inputVideoUrl && (
             <video
+              ref={videoRef}
               id="input_video"
               controls
-              className="p-5 max-w-full rounded-lg"
+              className="p-2 max-w-full rounded-lg shadow-lg"
               src={inputVideoUrl}
+              onLoadedMetadata={(e) => {
+                const dur = Number(e.currentTarget.duration.toFixed(1));
+                setDuration(dur);
+                setStartTime(0);
+                setEndTime(dur);
+                setCurrentTime(0);
+              }}
+              onTimeUpdate={(e) => {
+                const cur = e.currentTarget.currentTime;
+                setCurrentTime(cur);
+                if (isPreviewPlaying && cur >= endTime) {
+                  e.currentTarget.pause();
+                  setIsPreviewPlaying(false);
+                }
+              }}
+              onPause={() => setIsPreviewPlaying(false)}
+              onEnded={() => setIsPreviewPlaying(false)}
             ></video>
           )}
 
-          <div className="my-4 flex flex-col items-center">
+          {/* Interactive Timeline Bar */}
+          {inputVideo && duration > 0 && (
+            <div className="w-full max-w-xl mx-auto my-4 p-4 bg-gray-900/90 rounded-xl border border-gray-700 shadow-xl">
+              <div className="flex justify-between items-center text-xs text-gray-400 mb-2 font-mono">
+                <span>Playhead: {formatTime(currentTime)}</span>
+                <span className="text-blue-400 font-semibold">
+                  Clip: {formatTime(trimDuration)} ({trimDuration.toFixed(1)}s)
+                </span>
+                <span>Total: {formatTime(duration)}</span>
+              </div>
+
+              {/* Scrubber / Marker Track */}
+              <div
+                ref={timelineRef}
+                className="relative w-full h-10 flex items-center select-none cursor-pointer group"
+                onClick={handleTrackClick}
+              >
+                {/* Background Track */}
+                <div className="w-full h-3 bg-gray-800 rounded-full border border-gray-700 overflow-hidden relative">
+                  {/* Selected Trim Highlight */}
+                  <div
+                    className="absolute top-0 bottom-0 bg-blue-500/40 border-y border-blue-400 pointer-events-none transition-all duration-75"
+                    style={{
+                      left: `${startPercent}%`,
+                      width: `${Math.max(0, endPercent - startPercent)}%`,
+                    }}
+                  ></div>
+                </div>
+
+                {/* Playhead Indicator */}
+                <div
+                  className="absolute top-0 bottom-0 pointer-events-none z-10 transition-all duration-75"
+                  style={{ left: `${currentPercent}%` }}
+                >
+                  <div className="w-0.5 h-full bg-white shadow-md mx-auto"></div>
+                  <div className="w-2.5 h-2.5 bg-white rounded-full -translate-x-1/2 -translate-y-full shadow-md"></div>
+                </div>
+
+                {/* Start Marker Handle */}
+                <div
+                  className={`absolute top-1/2 -translate-y-1/2 z-20 touch-none select-none flex flex-col items-center ${
+                    isProcessing ? "opacity-50 pointer-events-none" : "cursor-grab active:cursor-grabbing"
+                  }`}
+                  style={{ left: `${startPercent}%`, transform: "translate(-50%, -50%)" }}
+                  onPointerDown={(e) => handlePointerDown("start", e)}
+                  onPointerMove={(e) => handlePointerMove("start", e)}
+                  onPointerUp={(e) => handlePointerUp("start", e)}
+                >
+                  <div className="bg-emerald-500 hover:bg-emerald-400 text-white text-[11px] font-bold px-1.5 py-0.5 rounded shadow-lg border border-emerald-300 flex items-center gap-0.5">
+                    <span>[</span>
+                    <span className="font-mono">{formatTime(startTime)}</span>
+                  </div>
+                  <div className="w-1 h-3 bg-emerald-500 rounded-b"></div>
+                </div>
+
+                {/* End Marker Handle */}
+                <div
+                  className={`absolute top-1/2 -translate-y-1/2 z-20 touch-none select-none flex flex-col items-center ${
+                    isProcessing ? "opacity-50 pointer-events-none" : "cursor-grab active:cursor-grabbing"
+                  }`}
+                  style={{ left: `${endPercent}%`, transform: "translate(-50%, -50%)" }}
+                  onPointerDown={(e) => handlePointerDown("end", e)}
+                  onPointerMove={(e) => handlePointerMove("end", e)}
+                  onPointerUp={(e) => handlePointerUp("end", e)}
+                >
+                  <div className="bg-rose-500 hover:bg-rose-400 text-white text-[11px] font-bold px-1.5 py-0.5 rounded shadow-lg border border-rose-300 flex items-center gap-0.5">
+                    <span className="font-mono">{formatTime(endTime)}</span>
+                    <span>]</span>
+                  </div>
+                  <div className="w-1 h-3 bg-rose-500 rounded-b"></div>
+                </div>
+              </div>
+
+              {/* Quick Actions Bar */}
+              <div className="flex flex-wrap items-center justify-between gap-2 mt-3 pt-3 border-t border-gray-800 text-xs">
+                <button
+                  type="button"
+                  disabled={isProcessing}
+                  onClick={setStartToCurrent}
+                  className="px-2.5 py-1 bg-emerald-950/80 hover:bg-emerald-800 text-emerald-300 border border-emerald-700/60 rounded transition-colors disabled:opacity-50 cursor-pointer flex items-center gap-1"
+                >
+                  <span>[</span> Set Start to Playhead
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isProcessing}
+                  onClick={togglePreviewTrim}
+                  className={`px-3 py-1 font-semibold rounded transition-colors disabled:opacity-50 cursor-pointer flex items-center gap-1.5 ${
+                    isPreviewPlaying
+                      ? "bg-amber-600 hover:bg-amber-500 text-white"
+                      : "bg-blue-600 hover:bg-blue-500 text-white"
+                  }`}
+                >
+                  {isPreviewPlaying ? "⏸ Pause Preview" : "▶ Preview Trim"}
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isProcessing}
+                  onClick={setEndToCurrent}
+                  className="px-2.5 py-1 bg-rose-950/80 hover:bg-rose-800 text-rose-300 border border-rose-700/60 rounded transition-colors disabled:opacity-50 cursor-pointer flex items-center gap-1"
+                >
+                  Set End to Playhead <span>]</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="my-3 flex flex-col items-center">
             <label
               htmlFor="videoPicker"
               className={`font-semibold py-2 px-4 rounded border border-blue-500 transition-colors ${
@@ -203,10 +407,15 @@ function App() {
                 setOutVideo(undefined);
                 setProgress(0);
                 setProcessingStage("");
+                setStartTime(0);
+                setEndTime(0);
+                setDuration(0);
+                setCurrentTime(0);
+                setIsPreviewPlaying(false);
               }}
             />
             {inputVideo && (
-              <span className="text-xs text-gray-400 mt-2">
+              <span className="text-xs text-gray-400 mt-2 font-mono">
                 {inputVideo.name}
               </span>
             )}
@@ -215,30 +424,80 @@ function App() {
           {inputVideo && (
             <div className="w-full flex flex-col items-center">
               <span className="text-sm text-gray-300 mb-3">
-                Enter times in Seconds
+                Adjust markers above or fine-tune times in Seconds
               </span>
-              <div className="flex flex-row ps-5 mb-3 items-center w-full max-w-xs justify-between">
-                <label className="pe-3 text-sm" htmlFor="video_start">
-                  Start:
-                </label>
-                <input
-                  type="number"
-                  id="video_start"
-                  defaultValue="0"
-                  disabled={isProcessing}
-                  className="shadow appearance-none border border-gray-600 rounded w-36 py-2 px-3 text-gray-100 bg-gray-700 leading-tight focus:outline-none focus:border-blue-500 disabled:opacity-50"
-                />
+              <div className="flex flex-row ps-5 mb-3 items-center w-full max-w-sm justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                  <label className="text-sm font-semibold" htmlFor="video_start">
+                    Start (s):
+                  </label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    id="video_start"
+                    value={startTime}
+                    min="0"
+                    max={duration || undefined}
+                    step="0.1"
+                    disabled={isProcessing}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      if (!isNaN(val)) {
+                        const clamped = Math.max(0, Math.min(val, endTime));
+                        setStartTime(clamped);
+                        if (videoRef.current) {
+                          videoRef.current.currentTime = clamped;
+                          setCurrentTime(clamped);
+                        }
+                      } else {
+                        setStartTime(0);
+                      }
+                    }}
+                    className="shadow appearance-none border border-gray-600 rounded w-28 py-1.5 px-3 text-gray-100 bg-gray-700 leading-tight focus:outline-none focus:border-blue-500 disabled:opacity-50 text-right font-mono"
+                  />
+                  <span className="text-xs text-gray-400 w-16 font-mono">
+                    ({formatTime(startTime)})
+                  </span>
+                </div>
               </div>
-              <div className="flex flex-row ps-5 mb-3 items-center w-full max-w-xs justify-between">
-                <label className="pe-3 text-sm" htmlFor="video_end">
-                  End:&nbsp;
-                </label>
-                <input
-                  type="number"
-                  id="video_end"
-                  disabled={isProcessing}
-                  className="shadow appearance-none border border-gray-600 rounded w-36 py-2 px-3 text-gray-100 bg-gray-700 leading-tight focus:outline-none focus:border-blue-500 disabled:opacity-50"
-                />
+
+              <div className="flex flex-row ps-5 mb-3 items-center w-full max-w-sm justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="inline-block w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+                  <label className="pe-3 text-sm font-semibold" htmlFor="video_end">
+                    End (s):
+                  </label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    id="video_end"
+                    value={endTime}
+                    min="0"
+                    max={duration || undefined}
+                    step="0.1"
+                    disabled={isProcessing}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      if (!isNaN(val)) {
+                        const clamped = Math.max(startTime, Math.min(val, duration || val));
+                        setEndTime(clamped);
+                        if (videoRef.current) {
+                          videoRef.current.currentTime = clamped;
+                          setCurrentTime(clamped);
+                        }
+                      } else {
+                        setEndTime(duration || 0);
+                      }
+                    }}
+                    className="shadow appearance-none border border-gray-600 rounded w-28 py-1.5 px-3 text-gray-100 bg-gray-700 leading-tight focus:outline-none focus:border-blue-500 disabled:opacity-50 text-right font-mono"
+                  />
+                  <span className="text-xs text-gray-400 w-16 font-mono">
+                    ({formatTime(endTime)})
+                  </span>
+                </div>
               </div>
 
               <button
@@ -325,7 +584,7 @@ function App() {
                 Trimmed Video Preview
               </h2>
               <video
-                className="p-2 max-w-full rounded-lg"
+                className="p-2 max-w-full rounded-lg shadow-lg"
                 controls
                 src={outVideo}
               />
