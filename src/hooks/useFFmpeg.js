@@ -62,20 +62,55 @@ export function useFFmpeg() {
    * Helper to inspect recent logs for recognizable error patterns.
    */
   const getFriendlyError = (defaultMsg) => {
-    const combined = recentLogsRef.current.join(" ").toLowerCase();
+    const combined = recentLogsRef.current.join("\n");
+    const lower = combined.toLowerCase();
+
+    // Check if we can extract source audio codec from FFmpeg stream announcement
+    // Examples: "Stream #0:1(eng): Audio: eac3" or "Stream #0:2: Audio: aac"
+    const audioCodecMatch = combined.match(
+      /Stream #0:\d+.*?: Audio: ([a-zA-Z0-9_-]+)/i,
+    );
+    const detectedCodec = audioCodecMatch
+      ? audioCodecMatch[1].toUpperCase()
+      : null;
+
     if (
-      combined.includes("matches no streams") ||
-      combined.includes("does not contain any stream")
+      lower.includes("matches no streams") ||
+      lower.includes("does not contain any stream") ||
+      lower.includes("output file #0 does not contain any stream")
     ) {
-      return "No matching stream found in this video file.";
+      return "No audio stream found in this video file.";
     }
+
     if (
-      combined.includes("could not find tag for codec") ||
-      combined.includes("not supported by") ||
-      combined.includes("only vp8 or vp9 or av1")
+      lower.includes("only aac streams can be muxed") ||
+      lower.includes("only mp3 was expected") ||
+      lower.includes("only opus streams can be muxed") ||
+      lower.includes("could not find tag for codec") ||
+      lower.includes("not supported by") ||
+      lower.includes("only vp8 or vp9 or av1") ||
+      lower.includes("error initializing output stream") ||
+      lower.includes("incorrect codec parameters") ||
+      lower.includes("could not write header") ||
+      lower.includes("codec not currently supported in container")
     ) {
-      return "The source codec is incompatible with this container in lossless mode.";
+      if (detectedCodec) {
+        return `Incompatible format: The source audio stream is encoded in ${detectedCodec}, which cannot be losslessly copied into this container. Try selecting .${detectedCodec.toLowerCase()} or .mka (Universal Matroska Audio).`;
+      }
+      return "The source audio codec is incompatible with the selected container format in lossless mode. Try selecting a different format (such as .mka, .eac3, or .ac3).";
     }
+
+    if (lower.includes("out of memory") || lower.includes("abort(")) {
+      return "Out of memory: The file is too large for the WebAssembly memory limit.";
+    }
+
+    if (
+      detectedCodec &&
+      (defaultMsg.includes("0 bytes") || defaultMsg.includes("empty"))
+    ) {
+      return `The extracted audio file is empty (0 bytes). The source audio codec (${detectedCodec}) cannot be stored in this container losslessly. Try selecting .${detectedCodec.toLowerCase()} or .mka.`;
+    }
+
     return defaultMsg;
   };
 
@@ -104,7 +139,7 @@ export function useFFmpeg() {
       await ffmpeg.writeFile(inName, await fetchFile(file));
       setProcessingStage("Trimming video... 0%");
 
-      await ffmpeg.exec([
+      const exitCode = await ffmpeg.exec([
         "-ss",
         String(startTime),
         "-to",
@@ -116,10 +151,18 @@ export function useFFmpeg() {
         outName,
       ]);
 
+      if (exitCode !== 0) {
+        throw new Error(`FFmpeg exited with error code ${exitCode}`);
+      }
+
       setProcessingStage("Preparing output preview...");
       setProgress(100);
 
       const data = await ffmpeg.readFile(outName);
+      if (!data || data.byteLength === 0) {
+        throw new Error("Output video file is empty (0 bytes).");
+      }
+
       const url = URL.createObjectURL(
         new Blob([data.buffer], { type: "video/*" }),
       );
@@ -145,7 +188,7 @@ export function useFFmpeg() {
   /**
    * Extracts audio stream using stream copy (-vn -c:a copy).
    * @param {File} file - Input video file.
-   * @param {string} targetFormat - Output audio format (e.g. 'm4a', 'aac', 'mp3', 'opus').
+   * @param {string} targetFormat - Output audio format (e.g. 'm4a', 'aac', 'mp3', 'opus', 'eac3', 'ac3', 'mka').
    * @returns {Promise<string>} Blob URL of extracted audio.
    */
   const extractAudio = useCallback(async (file, targetFormat = "m4a") => {
@@ -167,12 +210,29 @@ export function useFFmpeg() {
       await ffmpeg.writeFile(inName, await fetchFile(file));
       setProcessingStage("Extracting audio... 0%");
 
-      await ffmpeg.exec(["-i", inName, "-vn", "-c:a", "copy", outName]);
+      const exitCode = await ffmpeg.exec([
+        "-i",
+        inName,
+        "-map",
+        "0:a:0?",
+        "-vn",
+        "-c:a",
+        "copy",
+        outName,
+      ]);
+
+      if (exitCode !== 0) {
+        throw new Error(`FFmpeg exited with error code ${exitCode}`);
+      }
 
       setProcessingStage("Preparing audio preview...");
       setProgress(100);
 
       const data = await ffmpeg.readFile(outName);
+      if (!data || data.byteLength === 0) {
+        throw new Error("Extracted audio file is empty (0 bytes).");
+      }
+
       const mimeMap = {
         m4a: "audio/mp4",
         aac: "audio/aac",
@@ -180,6 +240,10 @@ export function useFFmpeg() {
         opus: "audio/opus",
         ogg: "audio/ogg",
         wav: "audio/wav",
+        flac: "audio/flac",
+        eac3: "audio/eac3",
+        ac3: "audio/ac3",
+        mka: "audio/x-matroska",
       };
       const mimeType = mimeMap[cleanFmt] || "audio/*";
       const url = URL.createObjectURL(
@@ -251,12 +315,19 @@ export function useFFmpeg() {
         await ffmpeg.writeFile(inName, await fetchFile(file));
         setProcessingStage("Removing streams... 0%");
 
-        await ffmpeg.exec(args);
+        const exitCode = await ffmpeg.exec(args);
+        if (exitCode !== 0) {
+          throw new Error(`FFmpeg exited with error code ${exitCode}`);
+        }
 
         setProcessingStage("Preparing output preview...");
         setProgress(100);
 
         const data = await ffmpeg.readFile(outName);
+        if (!data || data.byteLength === 0) {
+          throw new Error("Processed video file is empty (0 bytes).");
+        }
+
         const url = URL.createObjectURL(
           new Blob([data.buffer], { type: "video/*" }),
         );
@@ -315,12 +386,19 @@ export function useFFmpeg() {
         await ffmpeg.writeFile(inName, await fetchFile(file));
         setProcessingStage(`Remuxing to ${cleanTarget.toUpperCase()}... 0%`);
 
-        await ffmpeg.exec(args);
+        const exitCode = await ffmpeg.exec(args);
+        if (exitCode !== 0) {
+          throw new Error(`FFmpeg exited with error code ${exitCode}`);
+        }
 
         setProcessingStage("Preparing output download...");
         setProgress(100);
 
         const data = await ffmpeg.readFile(outName);
+        if (!data || data.byteLength === 0) {
+          throw new Error("Remuxed video file is empty (0 bytes).");
+        }
+
         const url = URL.createObjectURL(
           new Blob([data.buffer], { type: `video/${cleanTarget}` }),
         );

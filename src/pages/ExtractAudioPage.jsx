@@ -6,14 +6,29 @@ import { OutputPreview } from "../components/OutputPreview";
 const AUDIO_FORMAT_OPTIONS = [
   { value: "m4a", label: ".m4a (MP4/AAC Audio Container)" },
   { value: "aac", label: ".aac (Raw ADTS AAC Stream)" },
+  { value: "eac3", label: ".eac3 (Dolby Digital Plus / E-AC-3)" },
+  { value: "ac3", label: ".ac3 (Dolby Digital / AC-3)" },
   { value: "opus", label: ".opus (Opus Audio Container)" },
+  { value: "flac", label: ".flac (Lossless FLAC Audio)" },
   { value: "mp3", label: ".mp3 (MPEG Audio Stream)" },
+  { value: "wav", label: ".wav (PCM Waveform Audio)" },
+  { value: "mka", label: ".mka (Matroska Audio - Universal Lossless Container)" },
 ];
 
 function detectDefaultAudioFormat(fileName) {
   if (!fileName) return "m4a";
-  const ext = fileName.split(".").slice(-1)[0].toLowerCase();
+  const lower = fileName.toLowerCase();
+  const ext = lower.split(".").slice(-1)[0];
+
   if (ext === "webm") return "opus";
+  if (lower.includes("dd+") || lower.includes("eac3") || lower.includes("ddp")) {
+    return "eac3";
+  }
+  if (lower.includes("ac3") || lower.includes("dd5.1") || lower.includes("dolby")) {
+    return "ac3";
+  }
+  if (lower.includes("flac")) return "flac";
+  if (ext === "mkv") return "mka";
   return "m4a";
 }
 

@@ -209,4 +209,58 @@ describe("useFFmpeg", () => {
     expect(result.current.isProcessing).toBe(false);
     expect(result.current.processingStage).toBe("Trimming failed");
   });
+
+  it("throws error when FFmpeg returns non-zero exit code during extractAudio", async () => {
+    mockExec.mockResolvedValueOnce(1); // non-zero exit code
+    const { result } = renderHook(() => useFFmpeg());
+
+    const mockFile = new File(["dummy video"], "clip.mp4", {
+      type: "video/mp4",
+    });
+
+    let caughtError = null;
+    await act(async () => {
+      try {
+        await result.current.extractAudio(mockFile, "aac");
+      } catch (err) {
+        caughtError = err;
+      }
+    });
+
+    expect(caughtError).toBeDefined();
+    expect(result.current.isProcessing).toBe(false);
+    expect(result.current.processingStage).toBe("Extraction failed");
+  });
+
+  it("throws friendly error detecting source codec when output file is empty", async () => {
+    mockReadFile.mockResolvedValueOnce(new Uint8Array([])); // 0 bytes file
+    mockExec.mockImplementationOnce(async () => {
+      // Simulate FFmpeg logging stream info during execution
+      if (mockListeners["log"]) {
+        mockListeners["log"]({
+          message: "Stream #0:1(eng): Audio: eac3, 48000 Hz, 5.1(side)",
+        });
+      }
+      return 0;
+    });
+
+    const { result } = renderHook(() => useFFmpeg());
+
+    const mockFile = new File(["dummy video"], "clip.mkv", {
+      type: "video/x-matroska",
+    });
+
+    let caughtError = null;
+    await act(async () => {
+      try {
+        await result.current.extractAudio(mockFile, "aac");
+      } catch (err) {
+        caughtError = err;
+      }
+    });
+
+    expect(caughtError).toBeDefined();
+    expect(caughtError.message).toContain("EAC3");
+    expect(caughtError.message).toContain(".eac3");
+  });
 });
