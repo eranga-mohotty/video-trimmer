@@ -25,7 +25,10 @@ export function useFFmpeg() {
 
     ffmpeg.on("progress", ({ progress }) => {
       if (isMounted) {
-        const pct = Math.max(0, Math.min(100, Math.round((progress || 0) * 100)));
+        const pct = Math.max(
+          0,
+          Math.min(100, Math.round((progress || 0) * 100)),
+        );
         setProgress(pct);
         setProcessingStage(`Trimming video... ${pct}%`);
       }
@@ -86,7 +89,9 @@ export function useFFmpeg() {
       setProgress(100);
 
       const data = await ffmpeg.readFile(outName);
-      const url = URL.createObjectURL(new Blob([data.buffer], { type: "video/*" }));
+      const url = URL.createObjectURL(
+        new Blob([data.buffer], { type: "video/*" }),
+      );
       setProcessingStage("Trimming complete!");
 
       // Cleanup virtual files from MEMFS to keep memory usage low

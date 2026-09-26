@@ -5,7 +5,7 @@ export function Header() {
         Video Trimmer
       </h1>
       <p className="text-sm text-gray-400 mt-2">
-        Fast, private, in-browser video trimming powered by WebAssembly
+        Fast, private, in-browser video trimming powered by ffmpeg.wasm
       </p>
     </header>
   );

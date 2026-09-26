@@ -64,9 +64,14 @@ export function TimelineScrubber({
         {/* Start Marker Handle */}
         <div
           className={`absolute top-1/2 -translate-y-1/2 z-20 touch-none select-none flex flex-col items-center ${
-            disabled ? "opacity-50 pointer-events-none" : "cursor-grab active:cursor-grabbing"
+            disabled
+              ? "opacity-50 pointer-events-none"
+              : "cursor-grab active:cursor-grabbing"
           }`}
-          style={{ left: `${startPercent}%`, transform: "translate(-50%, -50%)" }}
+          style={{
+            left: `${startPercent}%`,
+            transform: "translate(-50%, -50%)",
+          }}
           onPointerDown={(e) => onPointerDown("start", e)}
           onPointerMove={(e) => onPointerMove("start", e)}
           onPointerUp={onPointerUp}
@@ -81,7 +86,9 @@ export function TimelineScrubber({
         {/* End Marker Handle */}
         <div
           className={`absolute top-1/2 -translate-y-1/2 z-20 touch-none select-none flex flex-col items-center ${
-            disabled ? "opacity-50 pointer-events-none" : "cursor-grab active:cursor-grabbing"
+            disabled
+              ? "opacity-50 pointer-events-none"
+              : "cursor-grab active:cursor-grabbing"
           }`}
           style={{ left: `${endPercent}%`, transform: "translate(-50%, -50%)" }}
           onPointerDown={(e) => onPointerDown("end", e)}

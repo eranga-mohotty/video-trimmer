@@ -24,7 +24,8 @@ export function FilePicker({ selectedFile, onFileSelect, disabled }) {
       />
       {selectedFile && (
         <span className="text-xs text-gray-400 mt-2 font-mono truncate max-w-sm">
-          📁 {selectedFile.name} ({(selectedFile.size / (1024 * 1024)).toFixed(1)} MB)
+          📁 {selectedFile.name} (
+          {(selectedFile.size / (1024 * 1024)).toFixed(1)} MB)
         </span>
       )}
     </div>

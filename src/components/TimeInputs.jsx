@@ -20,7 +20,10 @@ export function TimeInputs({
       <div className="flex flex-row ps-5 mb-3 items-center w-full max-w-sm justify-between">
         <div className="flex items-center gap-2">
           <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500" />
-          <label className="text-sm font-semibold text-gray-200" htmlFor="video_start">
+          <label
+            className="text-sm font-semibold text-gray-200"
+            htmlFor="video_start"
+          >
             Start (s):
           </label>
         </div>
@@ -49,7 +52,10 @@ export function TimeInputs({
       <div className="flex flex-row ps-5 mb-3 items-center w-full max-w-sm justify-between">
         <div className="flex items-center gap-2">
           <span className="inline-block w-2.5 h-2.5 rounded-full bg-rose-500" />
-          <label className="pe-3 text-sm font-semibold text-gray-200" htmlFor="video_end">
+          <label
+            className="pe-3 text-sm font-semibold text-gray-200"
+            htmlFor="video_end"
+          >
             End (s):
           </label>
         </div>
