@@ -1,187 +1,83 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import "./App.css";
 
-// Custom Hooks
+// Shared FFmpeg Hook
 import { useFFmpeg } from "./hooks/useFFmpeg";
-import { useVideoTimeline } from "./hooks/useVideoTimeline";
 
-// Presentational Components
+// Shell & Navigation Components
 import { Header } from "./components/Header";
+import { NavigationDrawer } from "./components/NavigationDrawer";
+import { ROUTE_DEFS } from "./constants/routes";
 import { FFmpegLoader } from "./components/FFmpegLoader";
-import { FilePicker } from "./components/FilePicker";
-import { VideoPlayer } from "./components/VideoPlayer";
-import { TimelineScrubber } from "./components/TimelineScrubber";
-import { TimeInputs } from "./components/TimeInputs";
-import { ProgressBar } from "./components/ProgressBar";
-import { TrimmedVideoPreview } from "./components/TrimmedVideoPreview";
+
+// Page Views
+import { TrimPage } from "./pages/TrimPage";
+import { ExtractAudioPage } from "./pages/ExtractAudioPage";
+import { RemoveStreamsPage } from "./pages/RemoveStreamsPage";
+import { SwitchContainerPage } from "./pages/SwitchContainerPage";
+
+function getRouteFromHash() {
+  const hash = window.location.hash.replace(/^#\/?/, "");
+  const found = ROUTE_DEFS.find((r) => r.id === hash);
+  return found ? found.id : "trim";
+}
 
 export default function App() {
-  const [inputVideo, setInputVideo] = useState(null);
-  const [outVideo, setOutVideo] = useState(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [currentRoute, setCurrentRoute] = useState(getRouteFromHash);
 
-  // Hook 1: FFmpeg Engine
-  const {
-    isLoaded,
-    isProcessing,
-    progress,
-    processingStage,
-    logMessage,
-    trimVideo,
-  } = useFFmpeg();
+  // Shared FFmpeg WebAssembly Engine (persists across page switches)
+  const ffmpegEngine = useFFmpeg();
 
-  // Hook 2: Video Timeline & Playback
-  const {
-    videoRef,
-    timelineRef,
-    duration,
-    currentTime,
-    startTime,
-    endTime,
-    isPreviewPlaying,
-    setIsPreviewPlaying,
-    reset: resetTimeline,
-    handleLoadedMetadata,
-    handleTimeUpdate,
-    updateStartTime,
-    updateEndTime,
-    handleTrackClick,
-    handlePointerDown,
-    handlePointerMove,
-    handlePointerUp,
-    setStartToCurrent,
-    setEndToCurrent,
-    togglePreviewTrim,
-  } = useVideoTimeline();
-
-  // Stable input video blob URL with automatic cleanup
-  const inputVideoUrl = useMemo(() => {
-    if (!inputVideo) return null;
-    return URL.createObjectURL(inputVideo);
-  }, [inputVideo]);
-
+  // Listen to hashchange events for browser back/forward and direct linking
   useEffect(() => {
-    return () => {
-      if (inputVideoUrl) URL.revokeObjectURL(inputVideoUrl);
+    const handleHashChange = () => {
+      setCurrentRoute(getRouteFromHash());
     };
-  }, [inputVideoUrl]);
+    window.addEventListener("hashchange", handleHashChange);
+    return () => window.removeEventListener("hashchange", handleHashChange);
+  }, []);
 
-  // Cleanup output video blob URL
-  useEffect(() => {
-    return () => {
-      if (outVideo) URL.revokeObjectURL(outVideo);
-    };
-  }, [outVideo]);
+  const navigateTo = useCallback((routeId) => {
+    window.location.hash = `#/${routeId}`;
+    setCurrentRoute(routeId);
+  }, []);
 
-  // Handle new video file selection
-  const handleFileSelect = useCallback(
-    (file) => {
-      if (outVideo) {
-        URL.revokeObjectURL(outVideo);
-        setOutVideo(null);
-      }
-      setInputVideo(file);
-      resetTimeline();
-    },
-    [outVideo, resetTimeline],
-  );
-
-  // Validate inputs and trigger trim operation
-  const handleConvert = useCallback(async () => {
-    if (isProcessing || !inputVideo) return;
-
-    if (isNaN(startTime) || startTime < 0) {
-      window.alert("Please provide a valid start time.");
-      return;
-    }
-
-    if (isNaN(endTime) || endTime <= 0) {
-      window.alert("Please provide a valid end time.");
-      return;
-    }
-
-    if (startTime >= endTime) {
-      window.alert("Start time must be strictly less than End time.");
-      return;
-    }
-
-    try {
-      if (outVideo) {
-        URL.revokeObjectURL(outVideo);
-        setOutVideo(null);
-      }
-      const trimmedUrl = await trimVideo(inputVideo, startTime, endTime);
-      setOutVideo(trimmedUrl);
-    } catch (err) {
-      window.alert(`Trimming failed: ${err.message || "Unknown error"}`);
-    }
-  }, [isProcessing, inputVideo, startTime, endTime, outVideo, trimVideo]);
+  const activeRouteDef = ROUTE_DEFS.find((r) => r.id === currentRoute);
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col items-center px-4 pb-12 selection:bg-blue-600 selection:text-white">
-      <Header />
+      {/* Collapsible Left Navigation Drawer */}
+      <NavigationDrawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        currentRoute={currentRoute}
+        onNavigate={navigateTo}
+      />
 
-      {!isLoaded ? (
+      {/* Top Header with Hamburger Button */}
+      <Header
+        onMenuClick={() => setIsDrawerOpen(true)}
+        currentRouteName={activeRouteDef?.name}
+      />
+
+      {/* Main Content Area */}
+      {!ffmpegEngine.isLoaded ? (
         <FFmpegLoader />
       ) : (
-        <main className="w-full max-w-2xl flex flex-col items-center">
-          <VideoPlayer
-            videoRef={videoRef}
-            videoUrl={inputVideoUrl}
-            onLoadedMetadata={handleLoadedMetadata}
-            onTimeUpdate={handleTimeUpdate}
-            onPause={() => setIsPreviewPlaying(false)}
-            onEnded={() => setIsPreviewPlaying(false)}
-          />
-
-          {inputVideo && duration > 0 && (
-            <TimelineScrubber
-              timelineRef={timelineRef}
-              duration={duration}
-              currentTime={currentTime}
-              startTime={startTime}
-              endTime={endTime}
-              disabled={isProcessing}
-              isPreviewPlaying={isPreviewPlaying}
-              onTrackClick={handleTrackClick}
-              onPointerDown={handlePointerDown}
-              onPointerMove={handlePointerMove}
-              onPointerUp={handlePointerUp}
-              onSetStartToCurrent={setStartToCurrent}
-              onSetEndToCurrent={setEndToCurrent}
-              onTogglePreviewTrim={togglePreviewTrim}
-            />
+        <main className="w-full max-w-2xl flex flex-col items-center mt-2">
+          {currentRoute === "trim" && (
+            <TrimPage ffmpegEngine={ffmpegEngine} />
           )}
-
-          <FilePicker
-            selectedFile={inputVideo}
-            onFileSelect={handleFileSelect}
-            disabled={isProcessing}
-          />
-
-          {inputVideo && (
-            <TimeInputs
-              startTime={startTime}
-              endTime={endTime}
-              duration={duration}
-              disabled={isProcessing}
-              isProcessing={isProcessing}
-              onStartTimeChange={updateStartTime}
-              onEndTimeChange={updateEndTime}
-              onConvert={handleConvert}
-            />
+          {currentRoute === "extract-audio" && (
+            <ExtractAudioPage />
           )}
-
-          <ProgressBar
-            isProcessing={isProcessing}
-            progress={progress}
-            stage={processingStage}
-            logMessage={logMessage}
-          />
-
-          <TrimmedVideoPreview
-            outVideoUrl={outVideo}
-            originalFileName={inputVideo?.name}
-          />
+          {currentRoute === "remove-streams" && (
+            <RemoveStreamsPage />
+          )}
+          {currentRoute === "switch-container" && (
+            <SwitchContainerPage />
+          )}
         </main>
       )}
     </div>
