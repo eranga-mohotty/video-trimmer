@@ -16,6 +16,9 @@ vi.mock("@ffmpeg/ffmpeg", () => {
       this.on = vi.fn((event, callback) => {
         mockListeners[event] = callback;
       });
+      this.off = vi.fn((event) => {
+        delete mockListeners[event];
+      });
       this.writeFile = mockWriteFile;
       this.readFile = mockReadFile;
       this.deleteFile = mockDeleteFile;
@@ -120,7 +123,7 @@ describe("useFFmpeg", () => {
 
     let audioPromise;
     act(() => {
-      audioPromise = result.current.extractAudio(mockFile, "m4a");
+      audioPromise = result.current.extractAudio(mockFile, "m4a", 1);
     });
 
     expect(result.current.isProcessing).toBe(true);
@@ -131,12 +134,44 @@ describe("useFFmpeg", () => {
 
     expect(mockWriteFile).toHaveBeenCalledTimes(1);
     expect(mockExec).toHaveBeenCalledWith(
-      expect.arrayContaining(["-vn", "-c:a", "copy"]),
+      expect.arrayContaining(["-map", "0:a:1", "-vn", "-c:a", "copy"]),
     );
     expect(mockReadFile).toHaveBeenCalledTimes(1);
-    expect(mockDeleteFile).toHaveBeenCalledTimes(2);
+    expect(mockDeleteFile).toHaveBeenCalled();
     expect(outUrl).toBe("blob:http://localhost/mock-video-url");
     expect(result.current.isProcessing).toBe(false);
+  });
+
+  it("probes audio tracks from media file logs", async () => {
+    mockExec.mockImplementationOnce(async () => {
+      if (mockListeners["log"]) {
+        mockListeners["log"]({
+          message:
+            "Stream #0:1(eng): Audio: eac3, 48000 Hz, 5.1(side), 640 kb/s (default)",
+        });
+        mockListeners["log"]({
+          message:
+            "Stream #0:2(jpn): Audio: eac3, 48000 Hz, 5.1(side), 640 kb/s",
+        });
+      }
+      return 1; // expected for header probe
+    });
+
+    const { result } = renderHook(() => useFFmpeg());
+    const mockFile = new File(["dummy video"], "dual.mkv", {
+      type: "video/x-matroska",
+    });
+
+    let tracks;
+    await act(async () => {
+      tracks = await result.current.probeAudioTracks(mockFile);
+    });
+
+    expect(tracks).toHaveLength(2);
+    expect(tracks[0].language).toBe("eng");
+    expect(tracks[0].audioIndex).toBe(0);
+    expect(tracks[1].language).toBe("jpn");
+    expect(tracks[1].audioIndex).toBe(1);
   });
 
   it("executes removeStreams with chosen options (-an, -sn, -dn)", async () => {

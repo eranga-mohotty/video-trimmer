@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { fetchFile } from "@ffmpeg/util";
+import { parseAudioStreams } from "../utils/audioTracks";
 
 /**
  * Custom hook encapsulating FFmpeg.wasm lifecycle, log streaming,
@@ -16,6 +17,7 @@ export function useFFmpeg() {
   const ffmpegRef = useRef(new FFmpeg());
   const currentOpRef = useRef("Processing");
   const recentLogsRef = useRef([]);
+  const activeVirtualFileRef = useRef(null); // { file, inName }
 
   useEffect(() => {
     let isMounted = true;
@@ -25,7 +27,7 @@ export function useFFmpeg() {
       if (isMounted) {
         setLogMessage(message);
         recentLogsRef.current.push(message);
-        if (recentLogsRef.current.length > 20) {
+        if (recentLogsRef.current.length > 30) {
           recentLogsRef.current.shift();
         }
       }
@@ -56,6 +58,76 @@ export function useFFmpeg() {
     return () => {
       isMounted = false;
     };
+  }, []);
+
+  /**
+   * Helper to write file once into MEMFS and cache its virtual name.
+   */
+  const getOrWriteVirtualFile = async (file) => {
+    const ffmpeg = ffmpegRef.current;
+    if (activeVirtualFileRef.current?.file === file) {
+      return activeVirtualFileRef.current.inName;
+    }
+
+    if (activeVirtualFileRef.current?.inName) {
+      try {
+        await ffmpeg.deleteFile(activeVirtualFileRef.current.inName);
+      } catch (cleanErr) {
+        console.debug("Previous virtual file cleanup:", cleanErr);
+      }
+      activeVirtualFileRef.current = null;
+    }
+
+    const inExt = file.name.split(".").slice(-1)[0] || "mp4";
+    const inName = `input_${Date.now()}.${inExt}`;
+    await ffmpeg.writeFile(inName, await fetchFile(file));
+    activeVirtualFileRef.current = { file, inName };
+    return inName;
+  };
+
+  /**
+   * Cleans up any cached virtual file from MEMFS.
+   */
+  const cleanupVirtualFiles = useCallback(async () => {
+    if (activeVirtualFileRef.current?.inName) {
+      try {
+        await ffmpegRef.current.deleteFile(activeVirtualFileRef.current.inName);
+      } catch (cleanErr) {
+        console.debug("Cleanup virtual file:", cleanErr);
+      }
+      activeVirtualFileRef.current = null;
+    }
+  }, []);
+
+  /**
+   * Probes a media file for audio streams and their metadata (codec, language, channels).
+   * @param {File} file - Input video file.
+   * @returns {Promise<Array<Object>>} List of detected audio tracks.
+   */
+  const probeAudioTracks = useCallback(async (file) => {
+    if (!file) return [];
+    const ffmpeg = ffmpegRef.current;
+
+    const inName = await getOrWriteVirtualFile(file);
+    const capturedLogs = [];
+
+    const logHandler = ({ message }) => {
+      capturedLogs.push(message);
+    };
+
+    ffmpeg.on("log", logHandler);
+
+    try {
+      await ffmpeg.exec(["-hide_banner", "-i", inName]);
+    } catch {
+      // Non-zero exit code expected as no output was specified
+    } finally {
+      if (ffmpeg.off) {
+        ffmpeg.off("log", logHandler);
+      }
+    }
+
+    return parseAudioStreams(capturedLogs);
   }, []);
 
   /**
@@ -189,86 +261,87 @@ export function useFFmpeg() {
    * Extracts audio stream using stream copy (-vn -c:a copy).
    * @param {File} file - Input video file.
    * @param {string} targetFormat - Output audio format (e.g. 'm4a', 'aac', 'mp3', 'opus', 'eac3', 'ac3', 'mka').
+   * @param {number} [audioIndex=0] - 0-based audio stream index to extract.
    * @returns {Promise<string>} Blob URL of extracted audio.
    */
-  const extractAudio = useCallback(async (file, targetFormat = "m4a") => {
-    if (!file) throw new Error("No input video file provided");
-    const ffmpeg = ffmpegRef.current;
+  const extractAudio = useCallback(
+    async (file, targetFormat = "m4a", audioIndex = 0) => {
+      if (!file) throw new Error("No input video file provided");
+      const ffmpeg = ffmpegRef.current;
 
-    currentOpRef.current = "Extracting audio";
-    recentLogsRef.current = [];
-    setIsProcessing(true);
-    setProgress(0);
-    setProcessingStage("Loading video into memory...");
+      currentOpRef.current = "Extracting audio";
+      recentLogsRef.current = [];
+      setIsProcessing(true);
+      setProgress(0);
+      setProcessingStage("Loading video into memory...");
 
-    const inExt = file.name.split(".").slice(-1)[0] || "mp4";
-    const cleanFmt = targetFormat.replace(/^\./, "").toLowerCase();
-    const inName = `input_${Date.now()}.${inExt}`;
-    const outName = `out_${Date.now()}.${cleanFmt}`;
+      const inName = await getOrWriteVirtualFile(file);
+      const cleanFmt = targetFormat.replace(/^\./, "").toLowerCase();
+      const outName = `out_${Date.now()}.${cleanFmt}`;
 
-    try {
-      await ffmpeg.writeFile(inName, await fetchFile(file));
-      setProcessingStage("Extracting audio... 0%");
-
-      const exitCode = await ffmpeg.exec([
-        "-i",
-        inName,
-        "-map",
-        "0:a:0?",
-        "-vn",
-        "-c:a",
-        "copy",
-        outName,
-      ]);
-
-      if (exitCode !== 0) {
-        throw new Error(`FFmpeg exited with error code ${exitCode}`);
-      }
-
-      setProcessingStage("Preparing audio preview...");
-      setProgress(100);
-
-      const data = await ffmpeg.readFile(outName);
-      if (!data || data.byteLength === 0) {
-        throw new Error("Extracted audio file is empty (0 bytes).");
-      }
-
-      const mimeMap = {
-        m4a: "audio/mp4",
-        aac: "audio/aac",
-        mp3: "audio/mpeg",
-        opus: "audio/opus",
-        ogg: "audio/ogg",
-        wav: "audio/wav",
-        flac: "audio/flac",
-        eac3: "audio/eac3",
-        ac3: "audio/ac3",
-        mka: "audio/x-matroska",
-      };
-      const mimeType = mimeMap[cleanFmt] || "audio/*";
-      const url = URL.createObjectURL(
-        new Blob([data.buffer], { type: mimeType }),
-      );
-      setProcessingStage("Audio extraction complete!");
-
-      return url;
-    } catch (err) {
-      console.error("Error during audio extraction:", err);
-      const friendly = getFriendlyError(
-        err.message || "Audio extraction failed",
-      );
-      setProcessingStage("Extraction failed");
-      throw new Error(friendly);
-    } finally {
-      setIsProcessing(false);
       try {
-        await ffmpeg.deleteFile(inName);
-        await ffmpeg.deleteFile(outName);
-      } catch (cleanErr) {
-        console.debug("Virtual file cleanup:", cleanErr);
+        setProcessingStage("Extracting audio... 0%");
+
+        const exitCode = await ffmpeg.exec([
+          "-i",
+          inName,
+          "-map",
+          `0:a:${audioIndex}`,
+          "-vn",
+          "-c:a",
+          "copy",
+          outName,
+        ]);
+
+        if (exitCode !== 0) {
+          throw new Error(`FFmpeg exited with error code ${exitCode}`);
+        }
+
+        setProcessingStage("Preparing audio preview...");
+        setProgress(100);
+
+        const data = await ffmpeg.readFile(outName);
+        if (!data || data.byteLength === 0) {
+          throw new Error("Extracted audio file is empty (0 bytes).");
+        }
+
+        const mimeMap = {
+          m4a: "audio/mp4",
+          aac: "audio/aac",
+          mp3: "audio/mpeg",
+          opus: "audio/opus",
+          ogg: "audio/ogg",
+          wav: "audio/wav",
+          flac: "audio/flac",
+          eac3: "audio/eac3",
+          ac3: "audio/ac3",
+          mka: "audio/x-matroska",
+        };
+        const mimeType = mimeMap[cleanFmt] || "audio/*";
+        const url = URL.createObjectURL(
+          new Blob([data.buffer], { type: mimeType }),
+        );
+        setProcessingStage("Audio extraction complete!");
+
+        return url;
+      } catch (err) {
+        console.error("Error during audio extraction:", err);
+        const friendly = getFriendlyError(
+          err.message || "Audio extraction failed",
+        );
+        setProcessingStage("Extraction failed");
+        throw new Error(friendly);
+      } finally {
+        setIsProcessing(false);
+        try {
+          await ffmpeg.deleteFile(outName);
+        } catch (cleanErr) {
+          console.debug("Virtual file cleanup:", cleanErr);
+        }
       }
-    }
-  }, []);
+    },
+    [],
+  );
 
   /**
    * Removes audio, subtitle, or metadata streams losslessly.
@@ -435,5 +508,7 @@ export function useFFmpeg() {
     extractAudio,
     removeStreams,
     switchContainer,
+    probeAudioTracks,
+    cleanupVirtualFiles,
   };
 }
